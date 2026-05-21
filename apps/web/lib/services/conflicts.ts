@@ -1,6 +1,6 @@
 import { prisma } from "../db";
 import { Prisma, type ConflictStatus } from "../generated/prisma/client";
-import { NotFoundError } from "../api/errors";
+import { ConflictError, NotFoundError } from "../api/errors";
 import { recordAudit } from "../audit";
 import { findOverlappingPairs } from "../conflicts";
 import { toResponse as sessionToResponse } from "./sessions";
@@ -120,6 +120,11 @@ export async function resolveConflict(
     if (!existing) {
       throw new NotFoundError("Conflit introuvable.");
     }
+    // Seul un conflit ouvert se tranche : rejouer une résolution sur un conflit
+    // déjà clos n'aurait pas de sens et polluerait le journal d'audit (409).
+    if (existing.status !== "open") {
+      throw new ConflictError("Ce conflit est déjà résolu ou ignoré.");
+    }
 
     const updated = await tx.conflict.update({
       where: { id },
@@ -150,37 +155,49 @@ export async function resolveConflict(
 /**
  * Passe de détection globale (déclenchée par n8n ou le front) :
  *  - ouvre un conflit pour chaque paire de sessions actives qui se chevauchent
- *    et n'a pas déjà un conflit non résolu (open ou ignored — on ne rouvre pas
- *    un chevauchement délibérément ignoré) ;
+ *    et n'a pas déjà un conflit non résolu (`open` ou `ignored`) ;
  *  - referme automatiquement les conflits `open` dont le chevauchement a disparu
  *    (session reprogrammée ou annulée). Les `ignored` ne sont jamais touchés.
+ *
+ * Choix produit assumé : `ignored` est définitif *pour cette paire de sessions*.
+ * Un chevauchement délibérément ignoré ne ressurgit pas, même s'il disparaît
+ * puis réapparaît — « j'ai acté que ces deux sessions se télescopent, ne me
+ * redemande plus ». La clé de déduplication porte sur les ID de sessions, pas
+ * sur l'instant du chevauchement.
+ *
+ * Concurrence : lectures et écritures dans une seule transaction, précédée d'un
+ * verrou consultatif Postgres. Deux passes simultanées (cron n8n + déclenchement
+ * manuel) sont sérialisées — sans quoi elles pourraient créer le conflit en
+ * double (aucune contrainte d'unicité sur la paire).
  *
  * Idempotente : relancée sans changement de données, elle ne crée rien.
  */
 export async function runDetection(actor: string): Promise<DetectionResult> {
-  // Lectures hors transaction : mono-utilisateur, pas de course concurrente (§4.3).
-  const pairs = await findOverlappingPairs();
-  const currentKeys = new Set(pairs.map((p) => pairKey(p.aId, p.bId)));
+  const { created, autoResolved } = await prisma.$transaction(async (tx) => {
+    // Sérialise les passes de détection concurrentes (libéré en fin de transaction).
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('tempora_conflict_detection'))`;
 
-  // Conflits déjà connus, avec leurs deux sessions, indexés par clé de paire.
-  const known = await prisma.conflict.findMany({
-    where: { status: { in: ["open", "ignored"] } },
-    include: { conflictSessions: { select: { sessionId: true } } },
-  });
-  const knownKeys = new Set(
-    known
-      .map((c) => conflictPairKey(c.conflictSessions))
-      .filter((key): key is string => key !== null),
-  );
-  const staleOpen = known.filter((c) => {
-    if (c.status !== "open") return false;
-    const key = conflictPairKey(c.conflictSessions);
-    return key !== null && !currentKeys.has(key);
-  });
+    const pairs = await findOverlappingPairs(tx);
+    const currentKeys = new Set(pairs.map((p) => pairKey(p.aId, p.bId)));
 
-  const toCreate = pairs.filter((p) => !knownKeys.has(pairKey(p.aId, p.bId)));
+    // Conflits déjà connus, avec leurs deux sessions, indexés par clé de paire.
+    const known = await tx.conflict.findMany({
+      where: { status: { in: ["open", "ignored"] } },
+      include: { conflictSessions: { select: { sessionId: true } } },
+    });
+    const knownKeys = new Set(
+      known
+        .map((c) => conflictPairKey(c.conflictSessions))
+        .filter((key): key is string => key !== null),
+    );
+    const staleOpen = known.filter((c) => {
+      if (c.status !== "open") return false;
+      const key = conflictPairKey(c.conflictSessions);
+      return key !== null && !currentKeys.has(key);
+    });
 
-  await prisma.$transaction(async (tx) => {
+    const toCreate = pairs.filter((p) => !knownKeys.has(pairKey(p.aId, p.bId)));
+
     for (const pair of toCreate) {
       const conflict = await tx.conflict.create({
         data: {
@@ -223,13 +240,11 @@ export async function runDetection(actor: string): Promise<DetectionResult> {
         tx,
       );
     }
+
+    return { created: toCreate.length, autoResolved: staleOpen.length };
   });
 
   const openTotal = await prisma.conflict.count({ where: { status: "open" } });
 
-  return {
-    created: toCreate.length,
-    autoResolved: staleOpen.length,
-    openTotal,
-  };
+  return { created, autoResolved, openTotal };
 }

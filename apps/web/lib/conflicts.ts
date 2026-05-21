@@ -64,8 +64,12 @@ export interface OverlappingPair {
  * SQL brut justifié (CLAUDE.md §4.2 / ADR-02) : aucun équivalent Prisma pour
  * l'auto-jointure sur l'opérateur && de tstzrange.
  */
-export async function findOverlappingPairs(): Promise<OverlappingPair[]> {
-  return prisma.$queryRaw<OverlappingPair[]>(Prisma.sql`
+export async function findOverlappingPairs(
+  // Accepte un client de transaction pour que la détection lise et écrive dans
+  // la même transaction (cf. runDetection : verrou + cohérence du snapshot).
+  client: Pick<typeof prisma, "$queryRaw"> = prisma,
+): Promise<OverlappingPair[]> {
+  return client.$queryRaw<OverlappingPair[]>(Prisma.sql`
     SELECT a.id AS "aId", b.id AS "bId"
     FROM sessions a
     JOIN sessions b ON a.id < b.id

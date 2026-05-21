@@ -245,6 +245,29 @@ describe("resolveConflict", () => {
     ).rejects.toThrow(/introuvable/i);
   });
 
+  it("refuse de re-trancher un conflit déjà résolu", async () => {
+    const schoolId = await makeSchool();
+    await makeSession(
+      schoolId,
+      "A",
+      "2027-03-08T09:00:00.000Z",
+      "2027-03-08T12:00:00.000Z",
+    );
+    await makeSession(
+      schoolId,
+      "B",
+      "2027-03-08T11:00:00.000Z",
+      "2027-03-08T13:00:00.000Z",
+    );
+    await runDetection(ACTOR);
+    const id = (await mySoleConflict()).id;
+    await resolveConflict(id, { status: "resolved" }, ACTOR);
+
+    await expect(
+      resolveConflict(id, { status: "ignored" }, ACTOR),
+    ).rejects.toThrow(/déjà résolu ou ignoré/i);
+  });
+
   it("un conflit ignoré n'est pas rouvert par une nouvelle détection", async () => {
     const schoolId = await makeSchool();
     await makeSession(
