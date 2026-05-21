@@ -3,6 +3,7 @@ import { buildOpenApiDocument } from "@/lib/api/openapi";
 import "@/lib/validators/schools";
 import "@/lib/validators/sessions";
 import "@/lib/validators/conflicts";
+import "@/lib/validators/invoices";
 
 describe("buildOpenApiDocument", () => {
   it("génère un document OpenAPI 3.0.3 valide", () => {
@@ -50,5 +51,19 @@ describe("buildOpenApiDocument", () => {
   it("référence le schéma Conflict dans les composants", () => {
     const doc = buildOpenApiDocument();
     expect(doc.components?.schemas?.["Conflict"]).toBeDefined();
+  });
+
+  it("expose les routes de la ressource invoices", () => {
+    const doc = buildOpenApiDocument();
+    expect(doc.paths?.["/invoices"]?.get).toBeDefined();
+    expect(doc.paths?.["/invoices"]?.post).toBeDefined();
+    expect(doc.paths?.["/invoices/{id}"]?.get).toBeDefined();
+    expect(doc.paths?.["/invoices/{id}"]?.patch).toBeDefined();
+    expect(doc.paths?.["/invoices/{id}"]?.delete).toBeDefined();
+  });
+
+  it("référence le schéma Invoice dans les composants", () => {
+    const doc = buildOpenApiDocument();
+    expect(doc.components?.schemas?.["Invoice"]).toBeDefined();
   });
 });

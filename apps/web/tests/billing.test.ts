@@ -1,8 +1,28 @@
 import { describe, it, expect } from "vitest";
 import { Prisma } from "../lib/generated/prisma/client";
-import { computeBillableAmount } from "../lib/billing";
+import { computeBillableAmount, computeDurationHours } from "../lib/billing";
 
 const rate = (n: string | number) => new Prisma.Decimal(n);
+
+describe("computeDurationHours", () => {
+  it("compte les heures pleines", () => {
+    const start = new Date("2026-06-01T09:00:00Z");
+    const end = new Date("2026-06-01T12:00:00Z");
+    expect(computeDurationHours(start, end).toString()).toBe("3");
+  });
+
+  it("arrondit au centième d'heure", () => {
+    const start = new Date("2026-06-01T09:00:00Z");
+    const end = new Date("2026-06-01T09:20:00Z"); // 1/3 h
+    expect(computeDurationHours(start, end).toString()).toBe("0.33");
+  });
+
+  it("rejette une fin antérieure au début", () => {
+    const start = new Date("2026-06-01T12:00:00Z");
+    const end = new Date("2026-06-01T09:00:00Z");
+    expect(() => computeDurationHours(start, end)).toThrow();
+  });
+});
 
 describe("computeBillableAmount", () => {
   it("calcule durée × taux pour une session de 3h à 50€/h", () => {
