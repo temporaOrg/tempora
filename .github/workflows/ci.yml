@@ -1,0 +1,55 @@
+name: CI
+
+# CI minimale — bloque le merge si rouge (cf. CLAUDE.md §4.7 et §9).
+# Lint + typecheck sur l'app Next.js. Les tests s'ajouteront quand le code existera.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Annule les runs précédents sur la même branche pour économiser des minutes CI.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint + Typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Skip propre tant que l'app n'est pas initialisée (avant S2).
+      # Dès qu'apps/web/package.json existe, ces étapes tournent réellement.
+      - name: Vérifier la présence de l'app
+        id: app
+        run: |
+          if [ -f package.json ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::apps/web/package.json absent — CI en attente du setup S2."
+          fi
+
+      - name: Install dependencies
+        if: steps.app.outputs.exists == 'true'
+        run: npm ci
+
+      - name: TypeScript — tsc --noEmit
+        if: steps.app.outputs.exists == 'true'
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        if: steps.app.outputs.exists == 'true'
+        run: npm run lint
