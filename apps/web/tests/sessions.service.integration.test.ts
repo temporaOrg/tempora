@@ -140,6 +140,23 @@ describe("updateSession", () => {
       updateSession(id, { endAt: new Date("2026-06-04T08:00:00.000Z") }, ACTOR),
     ).rejects.toThrow();
   });
+
+  it("refuse de modifier une session facturée", async () => {
+    const schoolId = await makeSchool(80);
+    const id = await makeSession({
+      schoolId,
+      title: "Facturée",
+      startAt: "2026-06-06T09:00:00.000Z",
+      endAt: "2026-06-06T11:00:00.000Z",
+    });
+    // Le statut invoiced n'est posable que hors CRUD (workflow facturation) : on le force ici.
+    await prisma.session.update({ where: { id }, data: { status: "invoiced" } });
+
+    await expect(
+      updateSession(id, { title: "Tentative" }, ACTOR),
+    ).rejects.toThrow(/facturée/i);
+    await expect(cancelSession(id, ACTOR)).rejects.toThrow(/facturée/i);
+  });
 });
 
 describe("cancelSession", () => {

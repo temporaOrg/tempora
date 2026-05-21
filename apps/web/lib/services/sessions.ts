@@ -1,6 +1,6 @@
 import { prisma } from "../db";
-import { Prisma, type Session } from "../generated/prisma/client";
-import { NotFoundError, ValidationError } from "../api/errors";
+import { Prisma, type Session, type SessionStatus } from "../generated/prisma/client";
+import { ConflictError, NotFoundError, ValidationError } from "../api/errors";
 import { recordAudit } from "../audit";
 import { computeBillableAmount } from "../billing";
 import { findOverlappingSessions } from "../conflicts";
@@ -45,6 +45,18 @@ function toResponse(session: Session): SessionResponse {
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
   };
+}
+
+/**
+ * Une session facturée est figée : ses bornes et son taux sont déjà arrêtés dans
+ * une ligne de facture. Toute mutation (reprogrammation, annulation) la
+ * désynchroniserait de la facture. On refuse donc l'opération (409, l'entrée est
+ * valide mais l'état de la ressource l'interdit).
+ */
+function assertNotInvoiced(status: SessionStatus): void {
+  if (status === "invoiced") {
+    throw new ConflictError("Une session facturée ne peut pas être modifiée.");
+  }
 }
 
 /** Garantit la cohérence des bornes : fin strictement après début. */
@@ -160,6 +172,7 @@ export async function updateSession(
     if (!existing) {
       throw new NotFoundError("Session introuvable.");
     }
+    assertNotInvoiced(existing.status);
 
     // Bornes résultantes après application partielle, validées avant écriture.
     const startAt = input.startAt ?? existing.startAt;
@@ -210,6 +223,7 @@ export async function cancelSession(id: string, actor: string): Promise<void> {
     if (!existing) {
       throw new NotFoundError("Session introuvable.");
     }
+    assertNotInvoiced(existing.status);
     if (existing.status === "cancelled") return; // idempotent
 
     const updated = await tx.session.update({
