@@ -45,8 +45,9 @@ Tempora est une solution self-hosted qui orchestre l'activité d'un formateur in
 
 | Brique | Choix | Version cible | Justification |
 |---|---|---|---|
-| Framework | Next.js | 15.x (App Router) | Fullstack, déploiement Docker, écosystème mature |
+| Framework | Next.js | 16.x (App Router) | Fullstack, déploiement Docker, écosystème mature |
 | Langage | TypeScript | 5.x | Typage strict obligatoire |
+| Runtime React | React | 19.x | Installé avec Next.js 16 |
 | UI library | shadcn/ui | dernière | Composants Radix, copy-paste, customisables |
 | Styling | Tailwind CSS | 4.x | Stylage utilitaire, cohérence design |
 | Icons | Lucide React | dernière | Set complet, tree-shakeable |
@@ -60,8 +61,8 @@ Tempora est une solution self-hosted qui orchestre l'activité d'un formateur in
 
 | Brique | Choix | Version cible | Justification |
 |---|---|---|---|
-| Runtime | Next.js API Routes (App Router) | 15.x | Même projet, même langage, même déploiement |
-| ORM | Prisma | 5.x | Client TypeScript généré, migrations versionnées, Studio inclus |
+| Runtime | Next.js API Routes (App Router) | 16.x | Même projet, même langage, même déploiement |
+| ORM | Prisma | 7.x | Client TypeScript généré, migrations versionnées. Generator `prisma-client` + driver adapter `@prisma/adapter-pg` obligatoire ; URL et seed dans `prisma.config.ts` |
 | Auth | Auth.js (NextAuth v5) | 5.x | Provider Credentials, JWT, middleware natif |
 | Password hashing | argon2 | dernière | Recommandé OWASP en 2026 |
 | Validation | Zod | dernière | Schémas partagés front/back |

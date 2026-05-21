@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SessionStatus {
+  proposal
+  confirmed
+  cancelled
+  invoiced
+
+  @@map("session_status")
+}
+
+enum SourceType {
+  outlook
+  email
+  csv
+  ical
+  scraper
+  manual
+
+  @@map("source_type")
+}
+
+enum IngestionStatus {
+  pending
+  normalized
+  failed
+  ignored
+
+  @@map("ingestion_status")
+}
+
+enum ConflictStatus {
+  open
+  resolved
+  ignored
+
+  @@map("conflict_status")
+}
+
+enum InvoiceStatus {
+  draft
+  issued
+  sent
+  paid
+  cancelled
+
+  @@map("invoice_status")
+}
+
+model School {
+  id                String   @id @default(cuid())
+  name              String
+  siret             String?
+  vatNumber         String?  @map("vat_number")
+  addressLine       String?  @map("address_line")
+  postalCode        String?  @map("postal_code")
+  city              String?
+  country           String   @default("FR")
+  billingEmail      String?  @map("billing_email")
+  defaultHourlyRate Decimal? @map("default_hourly_rate") @db.Decimal(10, 2)
+  color             String?
+  isArchived        Boolean  @default(false) @map("is_archived")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sessions Session[]
+  invoices Invoice[]
+
+  @@map("schools")
+}
+
+model Session {
+  id          String        @id @default(cuid())
+  schoolId    String        @map("school_id")
+  title       String
+  classe      String?
+  startAt     DateTime      @map("start_at") @db.Timestamptz(6)
+  endAt       DateTime      @map("end_at") @db.Timestamptz(6)
+  hourlyRate  Decimal       @map("hourly_rate") @db.Decimal(10, 2)
+  status      SessionStatus @default(proposal)
+  location    String?
+  source      SourceType    @default(manual)
+  ingestionId String?       @map("ingestion_id")
+  invoiceId   String?       @map("invoice_id")
+  notes       String?
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  school           School            @relation(fields: [schoolId], references: [id])
+  ingestion        Ingestion?        @relation(fields: [ingestionId], references: [id])
+  invoice          Invoice?          @relation(fields: [invoiceId], references: [id])
+  conflictSessions ConflictSession[]
+
+  @@index([schoolId])
+  @@index([status])
+  @@index([startAt])
+  @@map("sessions")
+}
+
+model Ingestion {
+  id          String          @id @default(cuid())
+  source      SourceType
+  externalId  String?         @map("external_id")
+  rawPayload  Json            @map("raw_payload")
+  status      IngestionStatus @default(pending)
+  error       String?
+  receivedAt  DateTime        @default(now()) @map("received_at") @db.Timestamptz(6)
+  processedAt DateTime?       @map("processed_at") @db.Timestamptz(6)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sessions Session[]
+
+  @@index([status])
+  @@index([externalId])
+  @@map("ingestions")
+}
+
+model Conflict {
+  id             String         @id @default(cuid())
+  status         ConflictStatus @default(open)
+  detectedAt     DateTime       @default(now()) @map("detected_at") @db.Timestamptz(6)
+  resolvedAt     DateTime?      @map("resolved_at") @db.Timestamptz(6)
+  resolutionNote String?        @map("resolution_note")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  conflictSessions ConflictSession[]
+
+  @@index([status])
+  @@map("conflicts")
+}
+
+model ConflictSession {
+  conflictId String @map("conflict_id")
+  sessionId  String @map("session_id")
+
+  conflict Conflict @relation(fields: [conflictId], references: [id], onDelete: Cascade)
+  session  Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@id([conflictId, sessionId])
+  @@map("conflict_sessions")
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  schoolId    String        @map("school_id")
+  number      String?
+  status      InvoiceStatus @default(draft)
+  periodStart DateTime      @map("period_start") @db.Date
+  periodEnd   DateTime      @map("period_end") @db.Date
+  currency    String        @default("EUR")
+  subtotal    Decimal       @default(0) @db.Decimal(10, 2)
+  taxAmount   Decimal       @default(0) @map("tax_amount") @db.Decimal(10, 2)
+  total       Decimal       @default(0) @db.Decimal(10, 2)
+  pennylaneId String?       @map("pennylane_id")
+  issuedAt    DateTime?     @map("issued_at") @db.Timestamptz(6)
+  dueAt       DateTime?     @map("due_at") @db.Timestamptz(6)
+  paidAt      DateTime?     @map("paid_at") @db.Timestamptz(6)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  school   School        @relation(fields: [schoolId], references: [id])
+  sessions Session[]
+  lines    InvoiceLine[]
+
+  @@index([schoolId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id        String   @id @default(cuid())
+  invoiceId String   @map("invoice_id")
+  sessionId String?  @map("session_id")
+  label     String
+  quantity  Decimal  @db.Decimal(10, 2)
+  unitPrice Decimal  @map("unit_price") @db.Decimal(10, 2)
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_lines")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actor      String
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

@@ -1,0 +1,23 @@
+# Postgres local pour développement et tests de apps/web.
+# Provisoire (porté par Iliès) — l'équipe infra le fusionnera dans la stack complète.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tempora-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tempora
+      POSTGRES_PASSWORD: tempora_dev
+      POSTGRES_DB: tempora
+    ports:
+      - "5432:5432"
+    volumes:
+      - tempora_pg_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tempora -d tempora"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  tempora_pg_dev:
