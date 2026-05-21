@@ -6,6 +6,7 @@ import { buildOpenApiDocument } from "@/lib/api/openapi";
 // ses schémas et ses routes sur le registre OpenAPI au chargement. Sans ces imports,
 // le document serait vide. Ajouter ici chaque nouvelle ressource.
 import "@/lib/validators/schools";
+import "@/lib/validators/sessions";
 
 /**
  * Contrat OpenAPI de l'API, dérivé des schémas Zod (source unique de vérité).

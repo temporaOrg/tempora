@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildOpenApiDocument } from "@/lib/api/openapi";
 import "@/lib/validators/schools";
+import "@/lib/validators/sessions";
 
 describe("buildOpenApiDocument", () => {
   it("génère un document OpenAPI 3.0.3 valide", () => {
@@ -21,5 +22,19 @@ describe("buildOpenApiDocument", () => {
   it("référence le schéma School dans les composants", () => {
     const doc = buildOpenApiDocument();
     expect(doc.components?.schemas?.["School"]).toBeDefined();
+  });
+
+  it("expose les routes de la ressource sessions", () => {
+    const doc = buildOpenApiDocument();
+    expect(doc.paths?.["/sessions"]?.get).toBeDefined();
+    expect(doc.paths?.["/sessions"]?.post).toBeDefined();
+    expect(doc.paths?.["/sessions/{id}"]?.patch).toBeDefined();
+    expect(doc.paths?.["/sessions/{id}"]?.delete).toBeDefined();
+    expect(doc.paths?.["/sessions/{id}/conflicts"]?.get).toBeDefined();
+  });
+
+  it("référence le schéma Session dans les composants", () => {
+    const doc = buildOpenApiDocument();
+    expect(doc.components?.schemas?.["Session"]).toBeDefined();
   });
 });
