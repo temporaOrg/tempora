@@ -27,6 +27,20 @@ import type {
 
 const ENTITY_TYPE = "invoice";
 
+/**
+ * Date d'une session dans le fuseau du formateur (CLAUDE.md §4.9), pour
+ * l'intitulé de ligne de facture. `toISOString` donnerait la date UTC : une
+ * session en soirée bascule alors d'un jour, ce qui daterait faux une ligne
+ * facturée. `en-CA` formate en `YYYY-MM-DD`. (`date-fns-tz` n'est pas encore
+ * dans la stack ; `Intl` couvre ce besoin ponctuel sans dépendance.)
+ */
+const PARIS_DAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Paris",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 /** Transitions de cycle de vie autorisées. L'annulation passe par `cancelInvoice`. */
 const ALLOWED_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
   draft: ["issued"],
@@ -118,7 +132,7 @@ export async function generateInvoice(
     const lines = sessions.map((session) => {
       const quantity = computeDurationHours(session.startAt, session.endAt);
       const amount = quantity.mul(session.hourlyRate).toDecimalPlaces(2);
-      const day = session.startAt.toISOString().slice(0, 10);
+      const day = PARIS_DAY.format(session.startAt);
       return {
         sessionId: session.id,
         label: `${session.title} (${day})`,
@@ -133,7 +147,9 @@ export async function generateInvoice(
       new Prisma.Decimal(0),
     );
     const taxAmount = new Prisma.Decimal(0); // franchise en base (cf. en-tête)
-    const total = subtotal.add(taxAmount);
+    // Arrondi au centime sur le total porté au grand livre : invariant qui tient
+    // déjà à TVA nulle, mais qui doit rester garanti le jour d'un taux non nul.
+    const total = subtotal.add(taxAmount).toDecimalPlaces(2);
 
     const invoice = await tx.invoice.create({
       data: {
@@ -251,10 +267,11 @@ export async function updateInvoice(
           input.status === "issued" && !existing.issuedAt
             ? new Date()
             : undefined,
+        // `paidAt` ne s'écrit qu'au passage à `paid` (comme `issuedAt` à
+        // `issued`) : un PATCH de métadonnées Pennylane ne doit pas horodater un
+        // paiement sur une facture qui n'est pas marquée payée.
         paidAt:
-          input.status === "paid"
-            ? (input.paidAt ?? new Date())
-            : input.paidAt,
+          input.status === "paid" ? (input.paidAt ?? new Date()) : undefined,
       },
       include: withRelations,
     });

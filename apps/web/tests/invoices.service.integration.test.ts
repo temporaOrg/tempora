@@ -172,6 +172,21 @@ describe("generateInvoice", () => {
       generate("school-inexistante", "2027-06-01", "2027-07-01"),
     ).rejects.toThrow(/introuvable/i);
   });
+
+  it("date l'intitulé de ligne dans le fuseau du formateur (Europe/Paris)", async () => {
+    const schoolId = await makeSchool();
+    // 22:30 UTC le 3 juin = 00:30 le 4 juin à Paris (été, +02:00).
+    await makeConfirmedSession(
+      schoolId,
+      "Cours du soir",
+      "2027-06-03T22:30:00.000Z",
+      "2027-06-03T23:30:00.000Z",
+    );
+
+    const invoice = await generate(schoolId, "2027-06-01", "2027-07-01");
+
+    expect(invoice.lines[0]?.label).toContain("(2027-06-04)");
+  });
 });
 
 describe("updateInvoice", () => {
@@ -219,6 +234,19 @@ describe("updateInvoice", () => {
     await expect(
       updateInvoice(id, { status: "paid" }, ACTOR),
     ).rejects.toThrow(/transition de statut interdite/i);
+  });
+
+  it("n'horodate pas paidAt sur un PATCH de métadonnées sans transition paid", async () => {
+    const id = await draftInvoice();
+    await updateInvoice(id, { status: "issued" }, ACTOR);
+    // Réécriture Pennylane seule (pas de status) : paidAt doit rester nul.
+    const updated = await updateInvoice(
+      id,
+      { pennylaneId: "pl_meta", paidAt: new Date("2027-08-15T00:00:00.000Z") },
+      ACTOR,
+    );
+    expect(updated.status).toBe("issued");
+    expect(updated.paidAt).toBeNull();
   });
 });
 
