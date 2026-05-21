@@ -325,6 +325,22 @@ Le sujet mentionne César, Outlook et Teams comme exemples, pas comme contrainte
 
 Le client a déjà un NAS Synology avec Docker. Hébergement gratuit, données sous son contrôle, accès distant natif via QuickConnect ou DDNS, HTTPS Let's Encrypt automatique. Aucun argument pour un hébergement cloud externe dans ce contexte.
 
+### ADR-07 — Conventions de la couche API (thin-route / fat-lib)
+
+Les route handlers Next.js restent **fins** : authentifier, valider l'entrée (Zod), appeler un service, formater la réponse. Toute la logique métier vit dans `lib/services/` (testable sans HTTP). Les contrats transverses sont centralisés une fois :
+
+- **Enveloppes uniformes** (`lib/api/response.ts`) : succès `{ data }`, liste `{ data, pagination }`, erreur `{ error: { code, message, details? } }`.
+- **Hiérarchie d'erreurs** (`lib/api/errors.ts`) + wrapper `withApi` (`lib/api/handler.ts`) qui rattrape tout, mappe `ZodError` → 422 structuré, et journalise sans PII.
+- **Audit** (`lib/audit.ts`) appelé par chaque service sur mutation critique (§4.2).
+
+### ADR-08 — OpenAPI dérivé des schémas Zod
+
+L'approche API-first impose un contrat machine-readable que le front consomme. Le contrat est **généré à partir des mêmes schémas Zod** qui valident les requêtes (`@asteasolutions/zod-to-openapi`), servi par `GET /api/openapi.json`. Une seule source de vérité : le contrat ne peut pas diverger du code. Un OpenAPI écrit à la main aurait dérivé à chaque évolution.
+
+### ADR-09 — Auth en couture remplaçable (avant Auth.js)
+
+Auth.js (NextAuth v5) arrive en S2. En attendant, `lib/api/auth.ts` expose `requireAuth()` / `getCurrentActor()` comme **unique point** décidant « qui appelle » (admin via `ADMIN_EMAIL`, deny-by-default sinon). En S2, on remplace le corps de ces fonctions par la vérification de session Auth.js : aucune route ni service à réécrire.
+
 ---
 
 ## 8. Workflow de développement par séance
