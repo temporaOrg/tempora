@@ -1,10 +1,17 @@
-import { Prisma } from "./generated/prisma/client";
+import { Prisma, SessionStatus } from "./generated/prisma/client";
 import { prisma } from "./db";
 
 export interface TimeRange {
   startAt: Date;
   endAt: Date;
 }
+
+// Statuts pour lesquels une session occupe réellement un créneau (donc sujette aux conflits).
+// Typé sur l'enum généré : tout renommage de SessionStatus est répercuté par le compilateur.
+const ACTIVE_STATUSES: SessionStatus[] = [
+  SessionStatus.proposal,
+  SessionStatus.confirmed,
+];
 
 /**
  * Vrai si deux créneaux se chevauchent. Bornes en semi-ouvert [start, end) :
@@ -34,7 +41,7 @@ export async function findOverlappingSessions(
   return prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
     SELECT id
     FROM sessions
-    WHERE status IN ('proposal', 'confirmed')
+    WHERE status::text IN (${Prisma.join(ACTIVE_STATUSES)})
       ${exclude}
       AND tstzrange(start_at, end_at) && tstzrange(${startAt}, ${endAt})
   `);
