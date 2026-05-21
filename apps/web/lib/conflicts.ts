@@ -46,3 +46,31 @@ export async function findOverlappingSessions(
       AND tstzrange(start_at, end_at) && tstzrange(${startAt}, ${endAt})
   `);
 }
+
+/** Une paire (non ordonnée) de sessions actives dont les créneaux se chevauchent. */
+export interface OverlappingPair {
+  aId: string;
+  bId: string;
+}
+
+/**
+ * Renvoie toutes les paires de sessions actives (proposal/confirmed) qui se
+ * chevauchent, dans l'ensemble de la base. La condition `a.id < b.id` garantit
+ * que chaque paire n'apparaît qu'une fois (et écarte l'auto-appariement).
+ *
+ * Sert à matérialiser les conflits (table `conflicts`) : une vue globale, là où
+ * findOverlappingSessions raisonne autour d'une seule session.
+ *
+ * SQL brut justifié (CLAUDE.md §4.2 / ADR-02) : aucun équivalent Prisma pour
+ * l'auto-jointure sur l'opérateur && de tstzrange.
+ */
+export async function findOverlappingPairs(): Promise<OverlappingPair[]> {
+  return prisma.$queryRaw<OverlappingPair[]>(Prisma.sql`
+    SELECT a.id AS "aId", b.id AS "bId"
+    FROM sessions a
+    JOIN sessions b ON a.id < b.id
+    WHERE a.status::text IN (${Prisma.join(ACTIVE_STATUSES)})
+      AND b.status::text IN (${Prisma.join(ACTIVE_STATUSES)})
+      AND tstzrange(a.start_at, a.end_at) && tstzrange(b.start_at, b.end_at)
+  `);
+}
