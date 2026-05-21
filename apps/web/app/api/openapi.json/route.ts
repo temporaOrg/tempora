@@ -8,6 +8,7 @@ import { buildOpenApiDocument } from "@/lib/api/openapi";
 import "@/lib/validators/schools";
 import "@/lib/validators/sessions";
 import "@/lib/validators/conflicts";
+import "@/lib/validators/invoices";
 
 /**
  * Contrat OpenAPI de l'API, dérivé des schémas Zod (source unique de vérité).
