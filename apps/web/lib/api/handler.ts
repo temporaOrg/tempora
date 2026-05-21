@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ZodError } from "zod";
+import { ZodError } from "./zod";
 import { logger } from "../logger";
 import {
   ApiError,

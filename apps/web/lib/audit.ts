@@ -37,8 +37,18 @@ function toJsonValue(value: unknown): Prisma.InputJsonValue | typeof Prisma.Json
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-export async function recordAudit(input: RecordAuditInput): Promise<void> {
-  await prisma.auditLog.create({
+/**
+ * Client Prisma accepté par recordAudit : soit le client global, soit un client
+ * de transaction interactive (`prisma.$transaction(async (tx) => …)`). Passer le
+ * `tx` rend la mutation et son audit atomiques (CLAUDE.md §4.2).
+ */
+type AuditClient = Prisma.TransactionClient;
+
+export async function recordAudit(
+  input: RecordAuditInput,
+  client: AuditClient = prisma,
+): Promise<void> {
+  await client.auditLog.create({
     data: {
       actor: input.actor,
       action: input.action,

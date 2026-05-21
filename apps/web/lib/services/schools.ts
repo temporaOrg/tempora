@@ -54,29 +54,28 @@ export async function createSchool(
   input: SchoolCreateInput,
   actor: string,
 ): Promise<SchoolResponse> {
-  const school = await prisma.school.create({
-    data: {
-      name: input.name,
-      siret: input.siret ?? null,
-      vatNumber: input.vatNumber ?? null,
-      addressLine: input.addressLine ?? null,
-      postalCode: input.postalCode ?? null,
-      city: input.city ?? null,
-      country: input.country, // undefined → @default("FR")
-      billingEmail: input.billingEmail ?? null,
-      defaultHourlyRate: toRate(input.defaultHourlyRate),
-      color: input.color ?? null,
-    },
+  return prisma.$transaction(async (tx) => {
+    const school = await tx.school.create({
+      data: {
+        name: input.name,
+        siret: input.siret ?? null,
+        vatNumber: input.vatNumber ?? null,
+        addressLine: input.addressLine ?? null,
+        postalCode: input.postalCode ?? null,
+        city: input.city ?? null,
+        country: input.country, // undefined → @default("FR")
+        billingEmail: input.billingEmail ?? null,
+        defaultHourlyRate: toRate(input.defaultHourlyRate),
+        color: input.color ?? null,
+      },
+    });
+    const dto = toResponse(school);
+    await recordAudit(
+      { actor, action: "create", entityType: ENTITY_TYPE, entityId: school.id, after: dto },
+      tx,
+    );
+    return dto;
   });
-  const dto = toResponse(school);
-  await recordAudit({
-    actor,
-    action: "create",
-    entityType: ENTITY_TYPE,
-    entityId: school.id,
-    after: dto,
-  });
-  return dto;
 }
 
 export async function listSchools(query: SchoolListQuery): Promise<{
@@ -119,56 +118,57 @@ export async function updateSchool(
   input: SchoolUpdateInput,
   actor: string,
 ): Promise<SchoolResponse> {
-  const existing = await prisma.school.findUnique({ where: { id } });
-  if (!existing) {
-    throw new NotFoundError("École introuvable.");
-  }
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.school.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError("École introuvable.");
+    }
 
-  const updated = await prisma.school.update({
-    where: { id },
-    data: {
-      name: input.name,
-      siret: input.siret,
-      vatNumber: input.vatNumber,
-      addressLine: input.addressLine,
-      postalCode: input.postalCode,
-      city: input.city,
-      country: input.country,
-      billingEmail: input.billingEmail,
-      defaultHourlyRate: toRate(input.defaultHourlyRate),
-      color: input.color,
-    },
-  });
+    const updated = await tx.school.update({
+      where: { id },
+      data: {
+        name: input.name,
+        siret: input.siret,
+        vatNumber: input.vatNumber,
+        addressLine: input.addressLine,
+        postalCode: input.postalCode,
+        city: input.city,
+        country: input.country,
+        billingEmail: input.billingEmail,
+        defaultHourlyRate: toRate(input.defaultHourlyRate),
+        color: input.color,
+      },
+    });
 
-  const dto = toResponse(updated);
-  await recordAudit({
-    actor,
-    action: "update",
-    entityType: ENTITY_TYPE,
-    entityId: id,
-    before: toResponse(existing),
-    after: dto,
+    const dto = toResponse(updated);
+    await recordAudit(
+      {
+        actor,
+        action: "update",
+        entityType: ENTITY_TYPE,
+        entityId: id,
+        before: toResponse(existing),
+        after: dto,
+      },
+      tx,
+    );
+    return dto;
   });
-  return dto;
 }
 
 /** Soft-delete : on archive plutôt que supprimer (exigence d'audit, spec §2). */
 export async function archiveSchool(id: string, actor: string): Promise<void> {
-  const existing = await prisma.school.findUnique({ where: { id } });
-  if (!existing) {
-    throw new NotFoundError("École introuvable.");
-  }
-  if (existing.isArchived) return; // idempotent
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.school.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError("École introuvable.");
+    }
+    if (existing.isArchived) return; // idempotent
 
-  await prisma.school.update({
-    where: { id },
-    data: { isArchived: true },
-  });
-  await recordAudit({
-    actor,
-    action: "archive",
-    entityType: ENTITY_TYPE,
-    entityId: id,
-    before: toResponse(existing),
+    await tx.school.update({ where: { id }, data: { isArchived: true } });
+    await recordAudit(
+      { actor, action: "archive", entityType: ENTITY_TYPE, entityId: id, before: toResponse(existing) },
+      tx,
+    );
   });
 }

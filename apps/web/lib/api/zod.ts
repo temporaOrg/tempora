@@ -11,3 +11,6 @@ import { z } from "zod";
 extendZodWithOpenApi(z);
 
 export { z };
+// Réexporté ici pour que tout le code passe par ce point d'entrée Zod unique
+// (le wrapper withApi s'en sert pour mapper les erreurs de validation en 422).
+export { ZodError } from "zod";
