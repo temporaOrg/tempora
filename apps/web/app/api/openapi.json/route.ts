@@ -7,6 +7,7 @@ import { buildOpenApiDocument } from "@/lib/api/openapi";
 // le document serait vide. Ajouter ici chaque nouvelle ressource.
 import "@/lib/validators/schools";
 import "@/lib/validators/sessions";
+import "@/lib/validators/conflicts";
 
 /**
  * Contrat OpenAPI de l'API, dérivé des schémas Zod (source unique de vérité).

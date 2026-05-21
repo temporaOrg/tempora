@@ -21,8 +21,9 @@ import type {
 
 const ENTITY_TYPE = "session";
 
-/** Mappe une entité Prisma vers la forme JSON exposée (Decimal → string, dates → ISO). */
-function toResponse(session: Session): SessionResponse {
+/** Mappe une entité Prisma vers la forme JSON exposée (Decimal → string, dates → ISO).
+ *  Exporté pour que d'autres ressources (conflicts) exposent la même forme de session. */
+export function toResponse(session: Session): SessionResponse {
   return {
     id: session.id,
     schoolId: session.schoolId,
